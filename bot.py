@@ -9,6 +9,8 @@ from telegram.ext import (
     filters,
 )
 
+from agent import agent
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -19,12 +21,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!"
     )
 
-
-async def message_repeater(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"You said: {update.message.text}\nAnd I believe in it",
-    )
+async def messageHandler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    initial_state =
 
 
 if __name__ == "__main__":
@@ -36,7 +34,7 @@ if __name__ == "__main__":
 
     start_handler = CommandHandler("start", start)
 
-    message_handler = MessageHandler(filters.TEXT, message_repeater)
+    message_handler = MessageHandler(filters.TEXT, messageHandler)
     application.add_handler(start_handler)
     application.add_handler(message_handler)
 
