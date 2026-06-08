@@ -28,13 +28,15 @@ logging.basicConfig(
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat is None:
+        return
     await context.bot.send_message(
         chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!"
     )
 
 
 async def messageHandler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat is None:
+    if update.effective_chat is None or update.message is None:
         return
     chat_id = update.effective_chat.id
 
