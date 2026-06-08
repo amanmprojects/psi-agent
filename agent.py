@@ -2,10 +2,12 @@ import operator
 import os
 from typing import Literal
 
-from langchain.messages import AnyMessage, SystemMessage
+import aiosqlite
+from langchain.messages import AnyMessage, SystemMessage, ToolMessage
+from langchain_core.messages.ai import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import Annotated, TypedDict
 
@@ -28,13 +30,11 @@ class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
 
 
-def set_chat_id(state: AgentState):
-    pass
-
-
 # Default node that runs on every telegram message
 async def llm_call(state: AgentState, config: RunnableConfig):
     """LLM handles the message from the user"""
+    if "configurable" not in config:
+        return {"messages": []}
     bot = config["configurable"].get("bot")
     chat_id = config["configurable"].get("chat_id")
 
@@ -51,17 +51,21 @@ async def llm_call(state: AgentState, config: RunnableConfig):
     }
 
 
-# Tool node
-from langchain.messages import ToolMessage
-
-
 async def tool_node(state: AgentState, config: RunnableConfig):
     """Performs the tool call"""
+    if "configurable" not in config:
+        return {"messages": []}
+
     bot = config["configurable"].get("bot")
     chat_id = config["configurable"].get("chat_id")
 
     result = []
-    for tool_call in state["messages"][-1].tool_calls:
+    last_message = state["messages"][-1]
+
+    if not isinstance(last_message, AIMessage):
+        return {"messages": result}
+
+    for tool_call in last_message.tool_calls:
         # Send the tool call message
         if bot and chat_id:
             tool_name = tool_call["name"]
@@ -83,7 +87,7 @@ def should_continue(state: AgentState) -> Literal["tool_node", END]:
     last_message = messages[-1]
 
     # If the LLM makes a tool call, then perform an action
-    if last_message.tool_calls:
+    if isinstance(last_message, AIMessage) and last_message.tool_calls:
         return "tool_node"
 
     return END
@@ -103,6 +107,10 @@ agent_builder.add_edge("tool_node", "llm_call")
 
 
 # Agent creater
-def create_agent():
+# Agent creater
+async def create_agent():
+    conn = await aiosqlite.connect("db/checkpoints.db")
+    checkpointer = AsyncSqliteSaver(conn)
+    await checkpointer.setup()
     print("Created Agent")
-    return agent_builder.compile(checkpointer=InMemorySaver())
+    return agent_builder.compile(checkpointer=checkpointer), conn
