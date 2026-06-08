@@ -3,6 +3,7 @@ import os
 from typing import Literal
 
 from langchain.messages import AnyMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -25,7 +26,6 @@ model = ChatOpenAI(
 
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
-    chat_id: int | str
 
 
 def set_chat_id(state: AgentState):
@@ -33,8 +33,14 @@ def set_chat_id(state: AgentState):
 
 
 # Default node that runs on every telegram message
-def llm_call(state: AgentState):
+async def llm_call(state: AgentState, config: RunnableConfig):
     """LLM handles the message from the user"""
+    bot = config["configurable"].get("bot")
+    chat_id = config["configurable"].get("chat_id")
+
+    if bot and chat_id:
+        await bot.send_chat_action(chat_id=chat_id, action="typing")
+
     return {
         "messages": [
             model.invoke(
@@ -49,11 +55,20 @@ def llm_call(state: AgentState):
 from langchain.messages import ToolMessage
 
 
-def tool_node(state: AgentState):
+async def tool_node(state: AgentState, config: RunnableConfig):
     """Performs the tool call"""
+    bot = config["configurable"].get("bot")
+    chat_id = config["configurable"].get("chat_id")
 
     result = []
     for tool_call in state["messages"][-1].tool_calls:
+        # Send the tool call message
+        if bot and chat_id:
+            tool_name = tool_call["name"]
+            await bot.send_message(
+                chat_id=chat_id, text=f"⚙️ Using tool: `{tool_name}`..."
+            )
+
         tool = tools_by_name[tool_call["name"]]
         observation = tool.invoke(tool_call["args"])
         result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
@@ -71,11 +86,8 @@ def should_continue(state: AgentState) -> Literal["tool_node", END]:
     if last_message.tool_calls:
         return "tool_node"
 
-    # Otherwise, we stop (reply to the user)
     return END
 
-
-# Build agent
 
 # Build workflow
 agent_builder = StateGraph(AgentState)
@@ -89,6 +101,8 @@ agent_builder.add_edge(START, "llm_call")
 agent_builder.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
 agent_builder.add_edge("tool_node", "llm_call")
 
-# Compile the agent
-agent = agent_builder.compile(checkpointer=InMemorySaver())
-print("Compiled Agent")
+
+# Agent creater
+def create_agent():
+    print("Created Agent")
+    return agent_builder.compile(checkpointer=InMemorySaver())
