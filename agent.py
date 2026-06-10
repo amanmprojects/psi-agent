@@ -19,10 +19,15 @@ def get_api_key() -> str:
     return os.environ.get("BEDROCK_API_KEY", "")
 
 
+# Model List
+# zai.glm-4.7
+# moonshotai.kimi-k2.5
+# moonshotai.kimi-k2-thinking
+
 model = ChatOpenAI(
     api_key=get_api_key,
     base_url="https://bedrock-mantle.ap-south-1.api.aws/v1",
-    model="zai.glm-4.7" or "moonshotai.kimi-k2.5",
+    model="moonshotai.kimi-k2-thinking",
 ).bind_tools(tools)
 
 
@@ -41,14 +46,19 @@ async def llm_call(state: AgentState, config: RunnableConfig):
     if bot and chat_id:
         await bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    return {
-        "messages": [
-            model.invoke(
-                [SystemMessage(content="You are a helpful assistant.")]
-                + state["messages"]
-            )
-        ]
-    }
+    result = model.invoke(
+        [SystemMessage(content="You are a helpful assistant.")] + state["messages"]
+    )
+
+    if bot and chat_id:
+        for block in result.content_blocks:
+            if block["type"] == "reasoning" and "reasoning" in block:
+                formatted_reasoning = f"__{block['reasoning']}__"
+                await bot.send_message(chat_id=chat_id, text=formatted_reasoning)
+
+        await bot.send_message(chat_id=chat_id, text=result.content)
+
+    return {"messages": [result]}
 
 
 async def tool_node(state: AgentState, config: RunnableConfig):

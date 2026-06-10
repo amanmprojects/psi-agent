@@ -52,7 +52,7 @@ async def messageHandler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     agent = context.application.bot_data["agent"]
 
-    result = await agent.ainvoke(
+    await agent.ainvoke(
         {"messages": [HumanMessage(content=update.message.text)]},
         config={
             "configurable": {
@@ -62,8 +62,6 @@ async def messageHandler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
         },
     )
-
-    await context.bot.send_message(chat_id=chat_id, text=result["messages"][-1].content)
 
 
 if __name__ == "__main__":
